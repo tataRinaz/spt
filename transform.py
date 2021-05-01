@@ -11,6 +11,7 @@ def _split_to_sentences(text: str) -> []:
 STOP_SIGN = '00000000'
 SUBJECT_DEP = 'nsubj'
 ROOT_DEP = 'ROOT'
+SPACE_TAG = 'SPACE'
 
 
 def _make_binary_data(data: str) -> str:
@@ -33,23 +34,29 @@ def _update_sentence(bit: str, tokenized: spacy.tokens.Doc, models_holder: Model
 
     search_part = SUBJECT_DEP if has_subject else ROOT_DEP
 
-    for index, token in enumerate(tokenized):
-        if token.tag_ == 'SPACE':
-            continue
-        if index != 0 and token.dep_ != 'punct':
-            output_sentence.append(' ')
+    def process_token(token: spacy.tokens.Token):
+        append_space = ''
+        if token.dep_ != 'punct':
+            append_space = ' '
         if token.dep_ != search_part or \
                 len(token.text) % 2 == int(bit):
-            output_sentence.append(token.text)
+            output_word = token.text
         else:
             matches = models_holder.get_synonyms(word=token.text)
             target_similarities = list(filter(lambda word: len(word) % 2 == int(bit), matches))
             replacer_word: str = target_similarities[0] if len(target_similarities) > 0 else token.text + token.text[-1]
             if token.text[0].isupper():
                 replacer_word = replacer_word.capitalize()
-            output_sentence.append(replacer_word)
 
-    return "".join(output_sentence)
+            output_word = replacer_word
+        return append_space + output_word
+
+    output_sentences = list(map(process_token,
+                                filter(lambda token: token.tag_ != SPACE_TAG, tokenized)
+                                )
+                            )
+
+    return "".join(output_sentences)
 
 
 def encrypt(data_to_hide: str, hiding_data: str, models_holder: ModelHolder) -> Tuple[str, str]:
@@ -62,11 +69,9 @@ def encrypt(data_to_hide: str, hiding_data: str, models_holder: ModelHolder) -> 
     assert sentences_count >= binary_data_len, 'Sentences count should not be less than binary data size'
 
     output_sentences = []
-    index = 0
     for bit, sentence in zip(binary_data, sentences):
         tokenized = models_holder.tokenize_sentence(sentence)
         output_sentences.append(_update_sentence(bit, tokenized, models_holder))
-        index += 1
 
     output_sentences += sentences[binary_data_len:]
 
@@ -90,16 +95,13 @@ def decrypt(hiding_data: str, models_holder: ModelHolder) -> Tuple[str, str]:
         has_subject = any(filter(lambda token: token.dep_ == SUBJECT_DEP, tokenized))
 
         search_part = SUBJECT_DEP if has_subject else ROOT_DEP
-        for token in doc:
-            if token.dep_ == search_part and token.tag_ != 'SPACE':
-                return token.text
 
-        return str()
+        return next((token for token in doc if token.dep_ == search_part and token.tag_ != SPACE_TAG), str())
 
     encrypted_data = str()
     sentences = _split_to_sentences(hiding_data)
 
-    for index, sentence in enumerate(sentences):
+    for sentence in sentences:
         tokenized = models_holder.tokenize_sentence(sentence)
         encrypted_data += str(len(find_replaced(tokenized)) % 2)
 
