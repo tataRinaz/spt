@@ -11,6 +11,7 @@ def _split_to_sentences(text: str) -> []:
 STOP_SIGN = '00000000'
 SUBJECT_DEP = 'nsubj'
 ROOT_DEP = 'ROOT'
+PUNCTUATION_DEP = 'punct'
 SPACE_TAG = 'SPACE'
 
 
@@ -29,14 +30,13 @@ def _make_binary_data(data: str) -> str:
 def _update_sentence(bit: str, tokenized: spacy.tokens.Doc, models_holder: ModelHolder) -> str:
     assert len(bit) == 1, 'Bit size is incorrect, it must be 1'
 
-    output_sentence = []
     has_subject = any(filter(lambda token: token.dep_ == SUBJECT_DEP, tokenized))
 
     search_part = SUBJECT_DEP if has_subject else ROOT_DEP
 
     def process_token(token: spacy.tokens.Token):
         append_space = ''
-        if token.dep_ != 'punct':
+        if token.dep_ != PUNCTUATION_DEP:
             append_space = ' '
         if token.dep_ != search_part or \
                 len(token.text) % 2 == int(bit):
