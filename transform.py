@@ -1,10 +1,10 @@
 import spacy.tokens
-from typing import Tuple
+from typing import Tuple, List
 
 from model_holder import ModelHolder
 
 
-def _split_to_sentences(text: str) -> []:
+def _split_to_sentences(text: str) -> List[str]:
     return text.split('.')
 
 
@@ -13,14 +13,15 @@ SUBJECT_DEP = 'nsubj'
 ROOT_DEP = 'ROOT'
 PUNCTUATION_DEP = 'punct'
 SPACE_TAG = 'SPACE'
+BITS_IN_BYTE = 8
 
 
 def _make_binary_data(data: str) -> str:
     def unify(byted):
         binary = f'{byted: 08b}'.replace(' ', '')
         number_size = len(binary)
-        if number_size < 8:
-            binary = "0" * (8 - number_size) + binary
+        if number_size < BITS_IN_BYTE:
+            binary = "0" * (BITS_IN_BYTE - number_size) + binary
 
         return binary
 
@@ -43,8 +44,8 @@ def _update_sentence(bit: str, tokenized: spacy.tokens.Doc, models_holder: Model
             output_word = token.text
         else:
             matches = models_holder.get_synonyms(word=token.text)
-            target_similarities = list(filter(lambda word: len(word) % 2 == int(bit), matches))
-            replacer_word: str = target_similarities[0] if len(target_similarities) > 0 else token.text + token.text[-1]
+            replacer_word = next(filter(lambda replacer: len(replacer) % 2 == int(bit), matches),
+                                 token.text + token.text[-1])
             if token.text[0].isupper():
                 replacer_word = replacer_word.capitalize()
 
@@ -79,15 +80,14 @@ def encrypt(data_to_hide: str, hiding_data: str, models_holder: ModelHolder) -> 
 
 
 def _convert_binary_to_string(binary_string: str) -> str:
-    def binary_to_decimal(binary: str) -> int:
-        return int(binary, 2)
-
-    output = str()
-    for i in range(0, len(binary_string), 8):
-        decimal_data = binary_to_decimal(binary_string[i:i + 8])
-        output += chr(decimal_data)
-
-    return output
+    return "".join(map(chr,
+                       map(lambda binary_str: int(binary_str, 2),
+                           map(lambda byte_index: binary_string[byte_index: byte_index + BITS_IN_BYTE],
+                               range(0, len(binary_string), BITS_IN_BYTE)
+                               )
+                           )
+                       )
+                   )
 
 
 def decrypt(hiding_data: str, models_holder: ModelHolder) -> Tuple[str, str]:
@@ -105,10 +105,10 @@ def decrypt(hiding_data: str, models_holder: ModelHolder) -> Tuple[str, str]:
         tokenized = models_holder.tokenize_sentence(sentence)
         encrypted_data += str(len(find_replaced(tokenized)) % 2)
 
-        if len(encrypted_data) % 8 == 0 and encrypted_data.endswith(STOP_SIGN):
+        if len(encrypted_data) % BITS_IN_BYTE == 0 and encrypted_data.endswith(STOP_SIGN):
             break
 
-    assert len(encrypted_data) % 8 == 0, f'Data is incorrect, not enough bits {len(encrypted_data)}'
-    encrypted_data = encrypted_data[:-8]
+    assert len(encrypted_data) % BITS_IN_BYTE == 0, f'Data is incorrect, not enough bits {len(encrypted_data)}'
+    encrypted_data = encrypted_data[:-BITS_IN_BYTE]
 
     return _convert_binary_to_string(encrypted_data), encrypted_data
