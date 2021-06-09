@@ -33,9 +33,9 @@ def main():
     result, hiders, hidden_data = encrypt(data_to_hide="10", sentences=text, models_holder=models_holder)
     decrypted, decrypted_binary = decrypt(sentences=hiders, models_holder=models_holder)
 
-    print("Original: " + "\n".join(text))
-    print("Encrypted: " + "\n".join(result))
-    print("Hiders: " + "\n".join(hiders))
+    print("Original: " + "\n".join(map(lambda p: f"{p[0]}. {p[1]}", enumerate(text))))
+    print("Encrypted: " + "\n".join(map(lambda p: f"{p[0]}. {p[1]}", enumerate(result))))
+    print("Hiders: " + "\n".join(map(lambda p: f"{p[0]}. {p[1]}", enumerate(hiders))))
     print("Decrypted: " + decrypted)
 
     assert hidden_data == decrypted_binary, f'Decrypted binary data differs from original hidden data.\n' \

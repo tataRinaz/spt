@@ -1,5 +1,5 @@
 import spacy.tokens
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 from collections import namedtuple
 
 from model_holder import ModelHolder
@@ -14,6 +14,16 @@ BITS_IN_BYTE = 8
 SearchParameters = namedtuple("SearchParameters", ["dep", "suffix"])
 subject_params = SearchParameters(dep=SUBJECT_DEP, suffix="_NOUN")
 root_params = SearchParameters(dep=ROOT_DEP, suffix="_VERB")
+
+pos_suffix_map = {
+    'PRON': '_PRON',
+    'CCONJ': '_NOUN',
+    'NOUN': '_NOUN',
+    'VERB': '_VERB',
+    'PROPN': '_NOUN',
+    'ADJ': '_ADJ',
+    'ADV': '_ADV'
+}
 
 
 def get_search_parameters(has_subject: bool) -> SearchParameters:
@@ -36,6 +46,9 @@ def _update_sentence(bit: str, tokenized: spacy.tokens.Doc, models_holder: Model
     assert bit is None or len(bit) == 1, 'Bit size is incorrect, it must be 1'
 
     has_subject = any(filter(lambda token: token.dep_ == SUBJECT_DEP, tokenized))
+    has_predicate = any(filter(lambda token: token.dep_ == ROOT_DEP, tokenized))
+    if not has_subject and not has_predicate:
+        return str(tokenized), False
 
     search_params = get_search_parameters(has_subject)
     bit_inserted = False
@@ -46,10 +59,10 @@ def _update_sentence(bit: str, tokenized: spacy.tokens.Doc, models_holder: Model
         if token.dep_ != PUNCTUATION_DEP:
             space = ' '
         if token.dep_ != search_params.dep or \
-                bit is None:
+                bit is None or bit_inserted:
             output_word = token.text
         else:
-            matches = models_holder.get_synonyms(word=token.text, suffix=search_params.suffix)
+            matches = models_holder.get_synonyms(word=token.text, suffix=pos_suffix_map[token.pos_])
             replacer_word = next(filter(lambda replacer: len(replacer) % 2 == int(bit), matches),
                                  None)
 
@@ -115,26 +128,29 @@ def _convert_binary_to_string(binary_string: str) -> str:
                    )
 
 
-def decrypt(sentences: List[str], models_holder: ModelHolder) -> Tuple[str, str]:
-    def find_replaced(doc: spacy.tokens.Doc) -> (str, str):
-        has_subject = any(filter(lambda token: token.dep_ == SUBJECT_DEP, tokenized))
+def decrypt(sentences: List[str], models_holder: ModelHolder) -> Optional[str]:
+    def find_replaced(doc: spacy.tokens.Doc) -> str:
+        has_subject = any(filter(lambda token: token.dep_ == SUBJECT_DEP and token.tag_ != SPACE_TAG, tokenized))
+        has_predicate = any(filter(lambda token: token.dep_ == ROOT_DEP and token.tag_ != SPACE_TAG, tokenized))
+        if not has_subject and not has_predicate:
+            return None
+
         search_params = get_search_parameters(has_subject)
 
         replacer = next((token for token in doc if token.dep_ == search_params.dep and token.tag_ != SPACE_TAG),
                         None)
+        if replacer is None:
+            return None
 
-        return replacer.text, search_params.suffix
-
-    def is_replacer(doc: str, suffix: str) -> bool:
-        similarities = models_holder.get_synonyms(doc, suffix)
-        return len(similarities) != 0
+        return replacer.text
 
     encrypted_data = str()
 
-    for sentence in sentences:
+    for index, sentence in enumerate(sentences):
         tokenized = models_holder.tokenize_sentence(sentence)
-        replacer, suffix = find_replaced(tokenized)
-        if replacer is None or not is_replacer(replacer, suffix):
+        replacer = find_replaced(tokenized)
+
+        if replacer is None:
             continue
 
         encrypted_data += str(len(replacer) % 2)

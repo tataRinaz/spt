@@ -1,5 +1,6 @@
 from typing import List
 import re
+import random
 
 import spacy
 import pymorphy2
@@ -15,17 +16,26 @@ class ModelHolder:
         self._suffixes = ["_NOUN", "_VERB", "_ADJ", "_ADV", "_PRON", "_NUM", "_INTJ"]
 
     def get_synonyms(self, word: str, suffix: str) -> List[str]:
-        sought = self._morph.parse(word)[0].normal_form + suffix
-        if not self._gensim_model.has_index_for(sought):
-            return []
-        similarities = self._gensim_model.most_similar(positive=sought)
+        morphed = self._morph.parse(word)[0]
+        sought = morphed.normal_form + suffix
+        similarities: List[str] = []
+        if self._gensim_model.has_index_for(sought):
+            similarities = self._gensim_model.most_similar(positive=sought)
+        similarities += self.get_any_words(suffix)
         removed_suffixes = list(map(lambda match: match[0].split('_')[0], similarities))
 
-        # denormalized_words = list(map(lambda word: self._denormalize_word(word, sought_parsed.tag), removed_suffixes))
-        return removed_suffixes
+        denormalized = list(map(lambda word: self._denormalize_word(word, morphed.tag), removed_suffixes))
+        return denormalized
 
     def tokenize_sentence(self, sentence: str):
         return self._spacy_model(sentence)
+
+    def get_any_words(self, suffix):
+        random_words = []
+        while len(random_words) < 100:
+            random_words += list(
+                filter(lambda word: word.endswith(suffix), random.sample(self._gensim_model.index_to_key, 100)))
+        return random_words
 
     def _denormalize_word(self, word: str, tags):
         tags = str(tags)
@@ -43,5 +53,6 @@ class ModelHolder:
                 tags_clean.append(t)
         tags = frozenset(tags_clean)
         parsed = self._morph.parse(word)[0]
-        result = parsed.inflect(tags)[0]
+        inflected = parsed.inflect(tags)
+        result = inflected[0] if inflected else word
         return result
