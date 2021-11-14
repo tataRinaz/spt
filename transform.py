@@ -22,7 +22,8 @@ pos_suffix_map = {
     'VERB': '_VERB',
     'PROPN': '_NOUN',
     'ADJ': '_ADJ',
-    'ADV': '_ADV'
+    'ADV': '_ADV',
+    'DET': '_NOUN'
 }
 
 
@@ -42,7 +43,8 @@ def _make_binary_data(data: str) -> str:
     return "".join(map(unify, bytearray(data, 'utf8'))) + STOP_SIGN
 
 
-def _update_sentence(bit: str, tokenized: spacy.tokens.Doc, models_holder: ModelHolder) -> (str, bool):
+def _update_sentence(bit: str, tokenized: spacy.tokens.Doc, models_holder: ModelHolder,
+                     intensity: float) -> Tuple[str, bool]:
     assert bit is None or len(bit) == 1, 'Bit size is incorrect, it must be 1'
 
     has_subject = any(filter(lambda token: token.dep_ == SUBJECT_DEP, tokenized))
@@ -59,10 +61,12 @@ def _update_sentence(bit: str, tokenized: spacy.tokens.Doc, models_holder: Model
         if token.dep_ != PUNCTUATION_DEP:
             space = ' '
         if token.dep_ != search_params.dep or \
-                bit is None or bit_inserted:
+                bit is None or bit_inserted or \
+                token.pos_ not in pos_suffix_map:
             output_word = token.text
         else:
-            matches = models_holder.get_synonyms(word=token.text, suffix=pos_suffix_map[token.pos_])
+            matches = models_holder.get_synonyms(word=token.text, suffix=pos_suffix_map[token.pos_],
+                                                 intensity=intensity)
             replacer_word = next(filter(lambda replacer: len(replacer) % 2 == int(bit), matches),
                                  None)
 
@@ -85,7 +89,8 @@ def _update_sentence(bit: str, tokenized: spacy.tokens.Doc, models_holder: Model
     return "".join(output_sentences), bit_inserted
 
 
-def encrypt(data_to_hide: str, sentences: List[str], models_holder: ModelHolder) -> Tuple[List[str], List[str], str]:
+def embed(data_to_hide: str, sentences: List[str], models_holder: ModelHolder,
+            intensity: float) -> Tuple[List[str], List[str], str]:
     binary_data = _make_binary_data(data_to_hide)
 
     binary_data_len = len(binary_data)
@@ -100,12 +105,15 @@ def encrypt(data_to_hide: str, sentences: List[str], models_holder: ModelHolder)
     while sentences_index < len(sentences):
         bit = binary_data[inserted_bits] if inserted_bits < binary_data_len else None
         tokenized = models_holder.tokenize_sentence(sentences[sentences_index])
-        updated_sentence, is_inserted = _update_sentence(bit, tokenized, models_holder)
+        updated_sentence, is_inserted = _update_sentence(bit, tokenized, models_holder, intensity)
         output_sentences.append(updated_sentence)
 
         if is_inserted:
             inserted_bits += 1
             hiders.append(updated_sentence)
+
+        if inserted_bits == binary_data_len:
+            break
 
         sentences_index += 1
 
@@ -128,8 +136,8 @@ def _convert_binary_to_string(binary_string: str) -> str:
                    )
 
 
-def decrypt(sentences: List[str], models_holder: ModelHolder) -> Optional[str]:
-    def find_replaced(doc: spacy.tokens.Doc) -> str:
+def extract(sentences: List[str], models_holder: ModelHolder) -> Tuple[str, str]:
+    def find_replaced(doc: spacy.tokens.Doc) -> Optional[str]:
         has_subject = any(filter(lambda token: token.dep_ == SUBJECT_DEP and token.tag_ != SPACE_TAG, tokenized))
         has_predicate = any(filter(lambda token: token.dep_ == ROOT_DEP and token.tag_ != SPACE_TAG, tokenized))
         if not has_subject and not has_predicate:
