@@ -2,7 +2,7 @@ import spacy.tokens
 from typing import Tuple, List, Optional
 from collections import namedtuple
 
-from model_holder import ModelHolder
+from model import Model
 
 STOP_SIGN = '00000000'
 SUBJECT_DEP = 'nsubj'
@@ -31,19 +31,7 @@ def get_search_parameters(has_subject: bool) -> SearchParameters:
     return subject_params if has_subject else root_params
 
 
-def _make_binary_data(data: str) -> str:
-    def unify(byted):
-        binary = f'{byted: 08b}'.replace(' ', '')
-        number_size = len(binary)
-        if number_size < BITS_IN_BYTE:
-            binary = "0" * (BITS_IN_BYTE - number_size) + binary
-
-        return binary
-
-    return "".join(map(unify, bytearray(data, 'utf8'))) + STOP_SIGN
-
-
-def _update_sentence(bit: str, tokenized: spacy.tokens.Doc, models_holder: ModelHolder,
+def _update_sentence(bit: str, tokenized: spacy.tokens.Doc, models_holder: Model,
                      intensity: float) -> Tuple[str, bool]:
     assert bit is None or len(bit) == 1, 'Bit size is incorrect, it must be 1'
 
@@ -89,7 +77,7 @@ def _update_sentence(bit: str, tokenized: spacy.tokens.Doc, models_holder: Model
     return "".join(output_sentences), bit_inserted
 
 
-def embed(data_to_hide: str, sentences: List[str], models_holder: ModelHolder,
+def embed(data_to_hide: str, sentences: List[str], models_holder: Model,
             intensity: float) -> Tuple[List[str], List[str], str]:
     binary_data = _make_binary_data(data_to_hide)
 
@@ -117,26 +105,10 @@ def embed(data_to_hide: str, sentences: List[str], models_holder: ModelHolder,
 
         sentences_index += 1
 
-    assert inserted_bits == binary_data_len, f"Not enough data. Probably some similarities are missed. " \
-                                             f"Try to extend text data.\n" \
-                                             f"Bits inserted:      {inserted_bits}\n" \
-                                             f"Binary data length: {binary_data_len}"
-
     return output_sentences, hiders, binary_data[:-8]
 
 
-def _convert_binary_to_string(binary_string: str) -> str:
-    return "".join(map(chr,
-                       map(lambda binary_str: int(binary_str, 2),
-                           map(lambda byte_index: binary_string[byte_index: byte_index + BITS_IN_BYTE],
-                               range(0, len(binary_string), BITS_IN_BYTE)
-                               )
-                           )
-                       )
-                   )
-
-
-def extract(sentences: List[str], models_holder: ModelHolder) -> Tuple[str, str]:
+def extract(sentences: List[str], models_holder: Model) -> Tuple[str, str]:
     def find_replaced(doc: spacy.tokens.Doc) -> Optional[str]:
         has_subject = any(filter(lambda token: token.dep_ == SUBJECT_DEP and token.tag_ != SPACE_TAG, tokenized))
         has_predicate = any(filter(lambda token: token.dep_ == ROOT_DEP and token.tag_ != SPACE_TAG, tokenized))
