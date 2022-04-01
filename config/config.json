@@ -1,0 +1,16 @@
+{
+  "models": [
+    {
+      "name": "russian",
+      "gensim_model": "D:\\git\\spt\\models\\model.bin",
+      "spacy_model": "ru_core_news_lg",
+      "minimal_sentence_length": 5,
+      "random_seed": 1337,
+      "intensity": 0.5
+    },
+    {
+      "name": "english",
+      "gensim_model": "D:\\git\\spt\\models\\en_model.bin",
+      "spacy_model": "en_core_web_trf"
+    }]
+}
